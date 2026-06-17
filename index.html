@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ thống phân loại rác thông minh</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800 font-sans">
+    <div class="container mx-auto px-4 py-10 max-w-4xl">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-extrabold text-green-600 mb-2">HỆ THỐNG PHÂN LOẠI RÁC THẢI</h1>
+            <p class="text-gray-500">Mô hình Deep Learning ResNet Custom (O - R)</p>
+        </header>
+
+        <div class="flex justify-center gap-4 mb-8">
+            <button id="tab-single" class="px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md transition">Test Đơn Ảnh</button>
+            <button id="tab-batch" class="px-6 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition">Test Hàng Loạt & Tải PDF</button>
+        </div>
+
+        <div id="section-single" class="block">
+            <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-gray-100">
+                <div id="drop-zone" class="border-2 border-dashed border-green-300 rounded-xl p-8 text-center cursor-pointer hover:bg-green-50 transition bg-green-50/20">
+                    <input type="file" id="file-input" accept="image/*" class="hidden">
+                    <p class="text-base font-medium text-gray-700">Kéo thả hoặc <span class="text-green-600 underline">bấm để chọn 1 ảnh</span></p>
+                </div>
+                <div id="preview-container" class="hidden mt-6 text-center">
+                    <img id="image-preview" class="max-h-64 mx-auto rounded-xl shadow-md" src="">
+                    <button id="btn-predict" class="mt-4 px-6 py-2.5 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">Nhận diện ảnh</button>
+                </div>
+            </div>
+            <div id="result-box" class="hidden bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                <h2 class="text-lg font-bold text-gray-800 mb-2">Kết quả phân tích:</h2>
+                <div class="text-2xl font-black text-green-600 mb-1" id="res-group">---</div>
+                <div class="text-sm text-gray-500">Độ tin cậy: <span id="res-confidence" class="font-bold">0%</span></div>
+            </div>
+
+        </div>
+
+        <div id="section-batch" class="hidden">
+            <div class="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-gray-100">
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-700 mb-3">Chọn danh sách nhiều tập tin ảnh:</label>
+                    <input type="file" id="batch-file-input" accept="image/*" multiple class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                </div>
+                <button id="btn-batch-predict" class="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition shadow-md hidden">
+                    Bắt đầu phân tích dữ liệu hàng loạt
+                </button>
+            </div>
+
+            <div id="pdf-action-box" class="hidden mb-6 text-right">
+                <button id="btn-download-pdf" class="px-6 py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition shadow-md inline-flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Tải File Báo Cáo PDF Về Máy
+                </button>
+            </div>
+
+            <div id="pdf-report-content" class="space-y-6">
+                <div id="batch-summary" class="hidden bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
+                    <h2 class="text-lg font-bold text-gray-800 mb-4">Bảng thống kê số lượng phân loại nhóm</h2>
+                    <div class="grid grid-cols-2 gap-4 text-center">
+                        <div class="bg-orange-50 border border-orange-200 p-4 rounded-xl">
+                            <div class="text-sm font-semibold text-orange-600">Rác Hữu Cơ (O)</div>
+                            <div id="summary-o-count" class="text-3xl font-black text-orange-700">0</div>
+                        </div>
+                        <div class="bg-blue-50 border border-blue-200 p-4 rounded-xl">
+                            <div class="text-sm font-semibold text-blue-600">Rác Tái Chế (R)</div>
+                            <div id="summary-r-count" class="text-3xl font-black text-blue-700">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="batch-items-container" class="space-y-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CHUYỂN ĐỔI TAB ---
+        const tabSingle = document.getElementById('tab-single');
+        const tabBatch = document.getElementById('tab-batch');
+        const secSingle = document.getElementById('section-single');
+        const secBatch = document.getElementById('section-batch');
+
+        tabSingle.addEventListener('click', () => {
+            secSingle.classList.replace('hidden', 'block'); secBatch.classList.replace('block', 'hidden');
+            tabSingle.className = "px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md transition";
+            tabBatch.className = "px-6 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition";
+        });
+        tabBatch.addEventListener('click', () => {
+            secBatch.classList.replace('hidden', 'block'); secSingle.classList.replace('block', 'hidden');
+            tabBatch.className = "px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md transition";
+            tabSingle.className = "px-6 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition";
+        });
+
+        // --- XỬ LÝ NHẬN DIỆN 1 ẢNH (TAB 1) ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const previewContainer = document.getElementById('preview-container');
+        const imagePreview = document.getElementById('image-preview');
+        const btnPredict = document.getElementById('btn-predict');
+        const resultBox = document.getElementById('result-box');
+        let singleFile = null;
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            if(e.target.files.length) {
+                singleFile = e.target.files[0];
+                imagePreview.src = URL.createObjectURL(singleFile);
+                previewContainer.classList.remove('hidden'); resultBox.classList.add('hidden');
+            }
+        });
+
+        btnPredict.addEventListener('click', async () => {
+            if (!singleFile) return;
+            const formData = new FormData(); formData.append('file', singleFile);
+            try {
+                const res = await fetch('http://127.0.0.1:8000/predict', { method: 'POST', body: formData });
+                const data = await res.json();
+                document.getElementById('res-group').innerText = data.group;
+                document.getElementById('res-confidence').innerText = (data.top_confidence * 100).toFixed(1) + '%';
+                resultBox.classList.remove('hidden');
+            } catch (err) { alert("Lỗi máy chủ API!"); }
+        });
+
+        // --- XỬ LÝ LUỒNG HÀNG LOẠT & ĐỒNG BỘ PDF (TAB 2) ---
+        const batchFileInput = document.getElementById('batch-file-input');
+        const btnBatchPredict = document.getElementById('btn-batch-predict');
+        const pdfActionBox = document.getElementById('pdf-action-box');
+        const batchSummary = document.getElementById('batch-summary');
+        const batchItemsContainer = document.getElementById('batch-items-container');
+        const btnDownloadPdf = document.getElementById('btn-download-pdf');
+
+        batchFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                btnBatchPredict.innerText = `Bắt đầu phân tích ${e.target.files.length} ảnh`;
+                btnBatchPredict.classList.remove('hidden');
+            } else {
+                btnBatchPredict.classList.add('hidden');
+            }
+        });
+
+        btnBatchPredict.addEventListener('click', async () => {
+            const files = batchFileInput.files;
+            if (files.length === 0) return;
+
+            btnBatchPredict.innerText = "Đang quét dữ liệu máy học...";
+            btnBatchPredict.disabled = true;
+
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
+
+            try {
+                const res = await fetch('http://127.0.0.1:8000/predict-batch', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                let countO = 0, countR = 0;
+                batchItemsContainer.innerHTML = "";
+
+                // Đọc bất đồng bộ các file ảnh sang dạng base64 để hiển thị lên bản báo cáo PDF
+                for (let i = 0; i < files.length; i++) {
+                    const fileData = data.results[i];
+                    if (fileData.prediction === 'O') countO++;
+                    if (fileData.prediction === 'R') countR++;
+
+                    const imgBase64 = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve(e.target.result);
+                        reader.readAsDataURL(files[i]);
+                    });
+
+                    const badgeColor = fileData.prediction === 'O' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800';
+                    const pctO = (fileData.prob_o * 100).toFixed(1) + '%';
+                    const pctR = (fileData.prob_r * 100).toFixed(1) + '%';
+
+                    // Thanh nổi bật theo kết quả dự đoán
+                    const isO = fileData.prediction === 'O';
+                    const barO = isO
+                        ? `<div class="w-full bg-orange-100 rounded-full h-4"><div class="bg-orange-500 h-4 rounded-full" style="width:${pctO}"></div></div>`
+                        : `<div class="w-full bg-gray-100 rounded-full h-2"><div class="bg-orange-200 h-2 rounded-full" style="width:${pctO}"></div></div>`;
+                    const barR = !isO
+                        ? `<div class="w-full bg-blue-100 rounded-full h-4"><div class="bg-blue-500 h-4 rounded-full" style="width:${pctR}"></div></div>`
+                        : `<div class="w-full bg-gray-100 rounded-full h-2"><div class="bg-blue-200 h-2 rounded-full" style="width:${pctR}"></div></div>`;
+                    const labelO = isO
+                        ? `<div class="flex justify-between text-xs font-black text-orange-600"><span>🟠 Hữu cơ (O):</span><span>${pctO}</span></div>`
+                        : `<div class="flex justify-between text-xs font-medium text-gray-400"><span>Hữu cơ (O):</span><span>${pctO}</span></div>`;
+                    const labelR = !isO
+                        ? `<div class="flex justify-between text-xs font-black text-blue-600"><span>🔵 Tái chế (R):</span><span>${pctR}</span></div>`
+                        : `<div class="flex justify-between text-xs font-medium text-gray-400"><span>Tái chế (R):</span><span>${pctR}</span></div>`;
+
+                    // Khung template HTML chi tiết của từng mẫu rác
+                    const itemHTML = `
+                        <div class="bg-white rounded-xl shadow-md p-4 border border-gray-100 flex flex-col sm:flex-row items-center gap-6 break-inside-avoid" style="page-break-inside: avoid; margin-bottom: 15px;">
+                            <div class="w-28 h-28 flex-shrink-0 bg-gray-50 rounded-lg overflow-hidden border border-gray-200 flex items-center justify-center">
+                                <img src="${imgBase64}" class="max-w-full max-h-full object-cover">
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-bold text-gray-800 truncate mb-1">${fileData.filename}</div>
+                                <span class="px-2 py-0.5 rounded-full text-xs font-bold ${badgeColor} inline-block mb-2">${fileData.group}</span>
+                                <div class="text-xs text-gray-400">Độ tin cậy: <span class="text-sm font-black text-gray-700">${(fileData.confidence * 100).toFixed(1)}%</span></div>
+                            </div>
+                            <div class="w-full sm:w-52 space-y-2 border-l pl-4 border-gray-100">
+                                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Biểu đồ xác suất</div>
+                                <div class="space-y-1">${labelO}${barO}</div>
+                                <div class="space-y-1">${labelR}${barR}</div>
+                            </div>
+                        </div>
+                    `;
+                    batchItemsContainer.insertAdjacentHTML('beforeend', itemHTML);
+                }
+
+                document.getElementById('summary-o-count').innerText = countO;
+                document.getElementById('summary-r-count').innerText = countR;
+
+                batchSummary.classList.remove('hidden');
+                pdfActionBox.classList.remove('hidden');
+            } catch (err) { alert("Lỗi kết nối Server!"); }
+            finally {
+                btnBatchPredict.innerText = `Bắt đầu phân tích ${files.length} ảnh`;
+                btnBatchPredict.disabled = false;
+            }
+        });
+
+        // --- SỰ KIỆN TẢI FILE PDF TRỰC TIẾP VỀ MÁY TÍNH ---
+        btnDownloadPdf.addEventListener('click', () => {
+            const element = document.getElementById('pdf-report-content');
+            const opt = {
+                margin:       [15, 15, 15, 15],
+                filename:     'Bao_Cao_Phan_Loai_Rac_Hang_Loat.pdf',
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+            
+            btnDownloadPdf.innerText = "Đang đóng gói PDF...";
+            html2pdf().set(opt).from(element).save().then(() => {
+                btnDownloadPdf.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Tải File Báo Cáo PDF Về Máy`;
+            });
+        });
+    </script>
+</body>
+</html>
